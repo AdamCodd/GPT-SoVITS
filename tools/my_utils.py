@@ -27,8 +27,10 @@ def load_audio(file, sr):
 
     return np.frombuffer(out, np.float32).flatten()
 
-
-def clean_path(path_str:str):
+def clean_path(path_str):
+    # Convert PosixPath to string if needed
+    path_str = str(path_str)
+    
     if path_str.endswith(('\\','/')):
         return clean_path(path_str[0:-1])
     path_str = path_str.replace('/', os.sep).replace('\\', os.sep)
