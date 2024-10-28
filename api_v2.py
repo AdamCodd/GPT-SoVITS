@@ -120,6 +120,11 @@ from GPT_SoVITS.TTS_infer_pack.TTS import TTS, TTS_Config
 from GPT_SoVITS.TTS_infer_pack.text_segmentation_method import get_method_names as get_cut_method_names
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from datetime import datetime
+import hashlib
+from pathlib import Path
+import shutil
+
 # print(sys.path)
 i18n = I18nAuto()
 cut_method_names = get_cut_method_names()
@@ -143,10 +148,13 @@ print(tts_config)
 tts_pipeline = TTS(tts_config)
 
 APP = FastAPI()
+UPLOAD_DIR = Path("uploaded_audio")
+UPLOAD_DIR.mkdir(exist_ok=True)
 class TTS_Request(BaseModel):
     text: str = None
     text_lang: str = None
     ref_audio_path: str = None
+    ref_audio_file: UploadFile = None
     aux_ref_audio_paths: list = None
     prompt_lang: str = None
     prompt_text: str = ""
@@ -164,6 +172,18 @@ class TTS_Request(BaseModel):
     streaming_mode:bool = False
     parallel_infer:bool = True
     repetition_penalty:float = 1.35
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    async def process_audio_file(self) -> str:
+        """Process the audio file if present and return the path"""
+        if self.ref_audio_file:
+            if self.ref_audio_path:
+                raise ValueError("Cannot provide both ref_audio_file and ref_audio_path")
+            file_path = await save_uploaded_file(self.ref_audio_file)
+            return str(file_path)
+        return self.ref_audio_path
 
 ### modify from https://github.com/RVC-Boss/GPT-SoVITS/pull/894/files
 def pack_ogg(io_buffer:BytesIO, data:np.ndarray, rate:int):
@@ -267,6 +287,27 @@ def check_params(req:dict):
         return JSONResponse(status_code=400, content={"message": f"text_split_method:{text_split_method} is not supported"})
 
     return None
+
+def sanitize_filename(filename: str) -> str:
+    """Create a safe filename while keeping the extension"""
+    name, ext = os.path.splitext(filename)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    name_hash = hashlib.md5(f"{name}{timestamp}".encode()).hexdigest()[:10]
+    safe_name = f"{name_hash}{ext}"
+    return safe_name
+
+async def save_uploaded_file(file: UploadFile) -> Path:
+    """Save an uploaded file and return its path"""
+    safe_filename = sanitize_filename(file.filename)
+    file_path = UPLOAD_DIR / safe_filename
+    
+    try:
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        file.file.close()
+    
+    return file_path
 
 async def tts_handle(req:dict):
     """
@@ -394,9 +435,27 @@ async def tts_get_endpoint(
 
 @APP.post("/tts")
 async def tts_post_endpoint(request: TTS_Request):
-    req = request.dict()
-    return await tts_handle(req)
+    try:
+        # Process the audio file if present
+        ref_audio_path = await request.process_audio_file()
+        if not ref_audio_path:
+            return JSONResponse(
+                status_code=400,
+                content={"message": "Must provide either ref_audio_file or ref_audio_path"}
+            )
 
+        # Convert to dict and update the ref_audio_path
+        req = request.dict(exclude={'ref_audio_file'})
+        req['ref_audio_path'] = ref_audio_path
+
+        return await tts_handle(req)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"message": str(e)})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Internal server error: {str(e)}"}
+        )
 
 @APP.get("/set_refer_audio")
 async def set_refer_aduio(refer_audio_path: str = None):
