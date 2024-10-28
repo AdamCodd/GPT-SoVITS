@@ -112,7 +112,8 @@ import numpy as np
 import soundfile as sf
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi import FastAPI, UploadFile, File
+from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI, UploadFile, File, Form, Depends
 import uvicorn
 from io import BytesIO
 from tools.i18n.i18n import I18nAuto
@@ -432,10 +433,52 @@ async def tts_get_endpoint(
     }
     return await tts_handle(req)
                 
-
 @APP.post("/tts")
-async def tts_post_endpoint(request: TTS_Request):
+async def tts_post_endpoint(
+    text: str = Form(...),
+    text_lang: str = Form(...),
+    ref_audio_file: UploadFile = File(...),
+    prompt_lang: str = Form(...),
+    prompt_text: str = Form(""),
+    top_k: int = Form(5),
+    top_p: float = Form(1.0),
+    temperature: float = Form(1.0),
+    text_split_method: str = Form("cut5"),
+    batch_size: int = Form(1),
+    batch_threshold: float = Form(0.75),
+    split_bucket: bool = Form(True),
+    speed_factor: float = Form(1.0),
+    fragment_interval: float = Form(0.3),
+    seed: int = Form(-1),
+    media_type: str = Form("wav"),
+    streaming_mode: bool = Form(False),
+    parallel_infer: bool = Form(True),
+    repetition_penalty: float = Form(1.35)
+):
     try:
+        # Create a TTS_Request instance from form data
+        request = TTS_Request(
+            text=text,
+            text_lang=text_lang,
+            ref_audio_file=ref_audio_file,
+            prompt_lang=prompt_lang,
+            prompt_text=prompt_text,
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+            text_split_method=text_split_method,
+            batch_size=batch_size,
+            batch_threshold=batch_threshold,
+            split_bucket=split_bucket,
+            speed_factor=speed_factor,
+            fragment_interval=fragment_interval,
+            seed=seed,
+            media_type=media_type,
+            streaming_mode=streaming_mode,
+            parallel_infer=parallel_infer,
+            repetition_penalty=repetition_penalty
+        )
+
         # Process the audio file if present
         ref_audio_path = await request.process_audio_file()
         if not ref_audio_path:
