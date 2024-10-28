@@ -90,56 +90,6 @@ class TTS_Request(BaseModel):
             return str(file_path)
         return self.ref_audio_path
 
-class AudioProcessor:
-    @staticmethod
-    def pack_ogg(io_buffer: BytesIO, data: np.ndarray, rate: int) -> BytesIO:
-        with sf.SoundFile(io_buffer, mode='w', samplerate=rate, channels=1, format='ogg') as audio_file:
-            audio_file.write(data)
-        return io_buffer
-
-    @staticmethod
-    def pack_raw(io_buffer: BytesIO, data: np.ndarray, rate: int) -> BytesIO:
-        io_buffer.write(data.tobytes())
-        return io_buffer
-
-    @staticmethod
-    def pack_wav(io_buffer: BytesIO, data: np.ndarray, rate: int) -> BytesIO:
-        io_buffer = BytesIO()
-        sf.write(io_buffer, data, rate, format='wav')
-        return io_buffer
-
-    @staticmethod
-    def pack_aac(io_buffer: BytesIO, data: np.ndarray, rate: int) -> BytesIO:
-        process = subprocess.Popen([
-            'ffmpeg',
-            '-f', 's16le',
-            '-ar', str(rate),
-            '-ac', '1',
-            '-i', 'pipe:0',
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-vn',
-            '-f', 'adts',
-            'pipe:1'
-        ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, _ = process.communicate(input=data.tobytes())
-        io_buffer.write(out)
-        return io_buffer
-
-    @staticmethod
-    def pack_audio(data: np.ndarray, rate: int, media_type: str) -> BytesIO:
-        io_buffer = BytesIO()
-        packers = {
-            "ogg": AudioProcessor.pack_ogg,
-            "aac": AudioProcessor.pack_aac,
-            "wav": AudioProcessor.pack_wav,
-            "raw": AudioProcessor.pack_raw
-        }
-        packer = packers.get(media_type, AudioProcessor.pack_raw)
-        io_buffer = packer(io_buffer, data, rate)
-        io_buffer.seek(0)
-        return io_buffer
-
 def wave_header_chunk(frame_input: bytes = b"", channels: int = 1, 
                      sample_width: int = 2, sample_rate: int = 32000) -> bytes:
     wav_buf = BytesIO()
@@ -150,6 +100,45 @@ def wave_header_chunk(frame_input: bytes = b"", channels: int = 1,
         vfout.writeframes(frame_input)
     wav_buf.seek(0)
     return wav_buf.read()
+
+class AudioProcessor:
+    @staticmethod
+    def pack_audio(data: np.ndarray, rate: int, media_type: str) -> BytesIO:
+        io_buffer = BytesIO()
+        try:
+            packers = {
+                "wav": AudioProcessor.pack_wav,
+                "raw": AudioProcessor.pack_raw
+            }
+            packer = packers.get(media_type, AudioProcessor.pack_raw)
+            io_buffer = packer(io_buffer, data, rate)
+            io_buffer.seek(0)
+            return io_buffer
+        except Exception as e:
+            io_buffer.close()
+            raise e
+
+    @staticmethod
+    def pack_wav(io_buffer: BytesIO, data: np.ndarray, rate: int) -> BytesIO:
+        try:
+            wav_data = wave_header_chunk(
+                frame_input=data.tobytes(),
+                channels=1,
+                sample_width=2,
+                sample_rate=rate
+            )
+            io_buffer.write(wav_data)
+            return io_buffer
+        except Exception as e:
+            raise e
+
+    @staticmethod
+    def pack_raw(io_buffer: BytesIO, data: np.ndarray, rate: int) -> BytesIO:
+        try:
+            io_buffer.write(data.tobytes())
+            return io_buffer
+        except Exception as e:
+            raise e
 
 def handle_control(command: str) -> None:
     if command == "restart":
@@ -223,23 +212,48 @@ async def tts_handle(req: Dict) -> Union[StreamingResponse, Response, JSONRespon
         tts_generator = tts_pipeline.run(req)
         
         if streaming_mode:
-            def streaming_generator(tts_generator: Generator, media_type: str):
-                if media_type == "wav":
-                    yield wave_header_chunk()
-                    media_type = "raw"
-                for sr, chunk in tts_generator:
-                    yield AudioProcessor.pack_audio(chunk, sr, media_type).getvalue()
+            async def streaming_generator(tts_generator: Generator, media_type: str):
+                try:
+                    if media_type == "wav":
+                        yield wave_header_chunk()
+                        media_type = "raw"
+                    async for sr, chunk in tts_generator:
+                        yield AudioProcessor.pack_audio(chunk, sr, media_type).getvalue()
+                except Exception as e:
+                    # Clean up generator
+                    if hasattr(tts_generator, 'close'):
+                        tts_generator.close()
+                    raise e
+                finally:
+                    # Ensure cleanup happens
+                    if hasattr(tts_generator, 'aclose'):
+                        await tts_generator.aclose()
             
             return StreamingResponse(
                 streaming_generator(tts_generator, media_type),
-                media_type=f"audio/{media_type}"
+                media_type=f"audio/{media_type}",
+                status_code=200
             )
         else:
-            sr, audio_data = next(tts_generator)
-            audio_data = AudioProcessor.pack_audio(audio_data, sr, media_type).getvalue()
-            return Response(audio_data, media_type=f"audio/{media_type}")
+            try:
+                sr, audio_data = next(tts_generator)
+                audio_data = AudioProcessor.pack_audio(audio_data, sr, media_type).getvalue()
+                return Response(audio_data, media_type=f"audio/{media_type}", status_code=200)
+            finally:
+                if hasattr(tts_generator, 'close'):
+                    tts_generator.close()
     except Exception as e:
-        return JSONResponse(status_code=400, content={"message": "tts failed", "Exception": str(e)})
+        # Clean up any remaining resources
+        if 'tts_generator' in locals() and hasattr(tts_generator, 'close'):
+            tts_generator.close()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "message": "TTS processing failed",
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+        )
 
 # FastAPI endpoints
 @APP.get("/control")
