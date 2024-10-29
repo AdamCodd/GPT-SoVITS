@@ -1,7 +1,7 @@
 import os
 import sys
 import traceback
-from typing import Dict, Generator, Optional, Union
+from typing import Dict, Generator, Optional, Union, List
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -59,9 +59,10 @@ APP = FastAPI()
 class TTS_Request(BaseModel):
     text: str = None
     text_lang: str = None
-    ref_audio_path: str = None
-    ref_audio_file: UploadFile = None
-    aux_ref_audio_paths: list = None
+    ref_audio_file: Optional[UploadFile] = None
+    ref_audio_path: Optional[str] = None
+    aux_ref_audio_files: Optional[List[UploadFile]] = []
+    aux_ref_audio_paths: Optional[List[str]] = []
     prompt_lang: str = None
     prompt_text: str = ""
     top_k: int = 5
@@ -82,13 +83,27 @@ class TTS_Request(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
-    async def process_audio_file(self) -> str:
-        if self.ref_audio_file:
-            if self.ref_audio_path:
-                raise ValueError("Cannot provide both ref_audio_file and ref_audio_path")
-            file_path = await save_uploaded_file(self.ref_audio_file)
-            return str(file_path)
-        return self.ref_audio_path
+    async def process_audio_files(self) -> tuple[str, list[str]]:
+        # Handle main reference file/path
+        if self.ref_audio_file and self.ref_audio_path:
+            raise ValueError("Cannot provide both ref_audio_file and ref_audio_path")
+        
+        main_ref_path = (await save_uploaded_file(self.ref_audio_file) 
+                        if self.ref_audio_file 
+                        else self.ref_audio_path)
+
+        # Handle auxiliary files/paths
+        aux_paths = []
+        if self.aux_ref_audio_paths:
+            for path in self.aux_ref_audio_paths:
+                aux_paths.append(
+                    str(await save_uploaded_file(path))
+                    if isinstance(path, UploadFile)
+                    else path
+                )
+
+        return main_ref_path, aux_paths
+
 
 def wave_header_chunk(frame_input: bytes = b"", channels: int = 1, 
                      sample_width: int = 2, sample_rate: int = 32000) -> bytes:
@@ -270,7 +285,10 @@ async def tts_get_endpoint(**params):
 async def tts_post_endpoint(
     text: str = Form(...),
     text_lang: str = Form(...),
-    ref_audio_file: UploadFile = File(...),
+    ref_audio_file: Optional[UploadFile] = File(None),
+    ref_audio_path: Optional[str] = Form(None),
+    aux_ref_audio_files: Optional[List[UploadFile]] = File(None),
+    aux_ref_audio_paths: Optional[List[str]] = Form(None),
     prompt_lang: str = Form(...),
     prompt_text: str = Form(""),
     top_k: int = Form(5),
@@ -289,10 +307,19 @@ async def tts_post_endpoint(
     repetition_penalty: float = Form(1.35)
 ):
     try:
+        if not ref_audio_file and not ref_audio_path:
+            return JSONResponse(
+                status_code=400,
+                content={"message": "Must provide either ref_audio_file or ref_audio_path"}
+            )
+
         request = TTS_Request(
             text=text,
             text_lang=text_lang,
             ref_audio_file=ref_audio_file,
+            ref_audio_path=ref_audio_path,
+            aux_ref_audio_files=aux_ref_audio_files or [],
+            aux_ref_audio_paths=aux_ref_audio_paths or [],
             prompt_lang=prompt_lang,
             prompt_text=prompt_text,
             top_k=top_k,
@@ -311,15 +338,12 @@ async def tts_post_endpoint(
             repetition_penalty=repetition_penalty
         )
 
-        ref_audio_path = await request.process_audio_file()
-        if not ref_audio_path:
-            return JSONResponse(
-                status_code=400,
-                content={"message": "Must provide either ref_audio_file or ref_audio_path"}
-            )
-
-        req = request.dict(exclude={'ref_audio_file'})
-        req['ref_audio_path'] = ref_audio_path
+        main_ref_path, aux_paths = await request.process_audio_files()
+        
+        req = request.dict(exclude={'ref_audio_file', 'aux_ref_audio_files'})
+        req['ref_audio_path'] = main_ref_path
+        if aux_paths:
+            req['aux_ref_audio_paths'] = aux_paths
 
         return await tts_handle(req)
     except ValueError as e:
