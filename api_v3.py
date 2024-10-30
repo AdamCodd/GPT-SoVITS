@@ -312,10 +312,12 @@ async def tts_post_endpoint(
 ):
     try:
         # Debug print to see received files
-        print(f"Received main reference file: {ref_audio_file.filename}")
-        print(f"Received {len(aux_ref_audio_files)} auxiliary files")
-        for idx, aux_file in enumerate(aux_ref_audio_files):
-            print(f"Auxiliary file {idx}: {aux_file.filename}")
+        if ref_audio_file:
+            print(f"Received main reference file: {ref_audio_file.filename}")
+        if aux_ref_audio_files:
+            print(f"Received {len(aux_ref_audio_files)} auxiliary files")
+            for idx, aux_file in enumerate(aux_ref_audio_files):
+                print(f"Auxiliary file {idx}: {aux_file.filename}")
 
         request = TTS_Request(
             text=text,
@@ -368,14 +370,6 @@ async def tts_post_endpoint(
             status_code=500,
             content={"message": f"Internal server error: {str(e)}"}
         )
-
-@APP.get("/set_refer_audio")
-async def set_refer_audio(refer_audio_path: str = None):
-    try:
-        tts_pipeline.set_ref_audio(refer_audio_path)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"message": "set refer audio failed", "Exception": str(e)})
-    return JSONResponse(status_code=200, content={"message": "success"})
 
 @APP.get("/set_gpt_weights")
 async def set_gpt_weights(weights_path: str = None):
