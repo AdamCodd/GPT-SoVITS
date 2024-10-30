@@ -13,15 +13,15 @@ import wave
 import signal
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, Request, HTTPException, Response
+from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
-from fastapi import FastAPI, UploadFile, File, Form
 import uvicorn
 from io import BytesIO
 from tools.i18n.i18n import I18nAuto
 from GPT_SoVITS.TTS_infer_pack.TTS import TTS, TTS_Config
 from GPT_SoVITS.TTS_infer_pack.text_segmentation_method import get_method_names as get_cut_method_names
+from tools.audio_checker import AudioQualityChecker, QualityCheckConfig, AudioQualityParams
 from pydantic import BaseModel
 from datetime import datetime
 import hashlib
@@ -370,6 +370,48 @@ async def tts_post_endpoint(
             status_code=500,
             content={"message": f"Internal server error: {str(e)}"}
         )
+
+class AudioCheckRequest(BaseModel):
+    checks: Optional[List[str]] = None  # Optional, if None all checks will be performed
+    params: Optional[AudioQualityParams] = None  # Optional, will use defaults if not provided
+
+@APP.post("/checkaudio")
+async def check_audio(
+    file: UploadFile = File(...),
+    config: Optional[AudioCheckRequest] = None
+):
+    try:
+        # Check if file is empty
+        audio_data = await file.read()
+        if not audio_data:
+            raise HTTPException(status_code=400, detail="Empty audio file")
+            
+        # Check file type
+        content_type = file.content_type
+        if not content_type or not content_type.startswith('audio/'):
+            raise HTTPException(status_code=400, detail="File must be an audio file")
+
+        audio_stream = io.BytesIO(audio_data)
+        
+        # Initialize checker
+        checker = AudioQualityChecker(
+            params=config.params if config and config.params else None
+        )
+        
+        # Process audio and get results
+        passed, metrics, analysis = checker.process_audio(
+            audio_stream, 
+            config.checks if config else None
+        )
+
+        return JSONResponse({
+            "passed": passed,
+            "metrics": metrics,
+            "analysis": analysis
+        })
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @APP.get("/set_gpt_weights")
 async def set_gpt_weights(weights_path: str = None):
