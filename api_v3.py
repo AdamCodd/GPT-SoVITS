@@ -165,12 +165,12 @@ def handle_control(command: str) -> None:
 
 def check_params(req: Dict) -> Optional[JSONResponse]:
     text = req.get("text", "")
-    text_lang = req.get("text_lang", "")
+    text_lang = req.get("text_lang", "").lower()
     ref_audio_path = req.get("ref_audio_path", "")
-    ref_audio_file = req.get("ref_audio_file")
+    ref_audio_file = req.get("ref_audio_file", None)
     streaming_mode = req.get("streaming_mode", False)
     media_type = req.get("media_type", "wav")
-    prompt_lang = req.get("prompt_lang", "")
+    prompt_lang = req.get("prompt_lang", "").lower()
     text_split_method = req.get("text_split_method", "cut5")
 
     # Basic required field validation
@@ -178,13 +178,15 @@ def check_params(req: Dict) -> Optional[JSONResponse]:
         return JSONResponse(status_code=400, content={"message": "Must provide either ref_audio_file or ref_audio_path"})
     if not text:
         return JSONResponse(status_code=400, content={"message": "text is required"})
+
+    # Language validation
     if not text_lang:
         return JSONResponse(status_code=400, content={"message": "text_lang is required"})
-    elif text_lang.lower() not in tts_config.languages:
+    elif text_lang not in tts_config.languages:
         return JSONResponse(status_code=400, content={"message": f"text_lang: {text_lang} is not supported in version {tts_config.version}"})
     if not prompt_lang:
         return JSONResponse(status_code=400, content={"message": "prompt_lang is required"})
-    elif prompt_lang.lower() not in tts_config.languages:
+    elif prompt_lang not in tts_config.languages:
         return JSONResponse(status_code=400, content={"message": f"prompt_lang: {prompt_lang} is not supported in version {tts_config.version}"})
     
     # Media type validation
@@ -195,7 +197,7 @@ def check_params(req: Dict) -> Optional[JSONResponse]:
     
     # Text split method validation
     if text_split_method not in cut_method_names:
-        return JSONResponse(status_code=400, content={"message": f"text_split_method:{text_split_method} is not supported"})
+        return JSONResponse(status_code=400, content={"message": f"text_split_method: {text_split_method} is not supported"})
 
     return None
 
