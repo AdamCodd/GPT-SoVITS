@@ -173,17 +173,9 @@ def check_params(req: Dict) -> Optional[JSONResponse]:
     prompt_lang = req.get("prompt_lang", "")
     text_split_method = req.get("text_split_method", "cut5")
 
-    # If neither ref_audio_file nor ref_audio_path is provided, try prompt_cache
-    if not ref_audio_file and not ref_audio_path:
-        if tts_pipeline.prompt_cache["ref_audio_path"]:
-            ref_audio_path = tts_pipeline.prompt_cache["ref_audio_path"]
-            # If prompt_lang is not provided, use the one from prompt_cache
-            if not prompt_lang and tts_pipeline.prompt_cache["prompt_lang"]:
-                prompt_lang = tts_pipeline.prompt_cache["prompt_lang"]
-        else:
-            return JSONResponse(status_code=400, content={"message": "Must provide either ref_audio_file or ref_audio_path"})
-
     # Basic required field validation
+    if not ref_audio_file and not ref_audio_path:
+        return JSONResponse(status_code=400, content={"message": "Must provide either ref_audio_file or ref_audio_path"})
     if not text:
         return JSONResponse(status_code=400, content={"message": "text is required"})
     if not text_lang:
