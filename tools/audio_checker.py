@@ -16,9 +16,16 @@ class AudioQualityParams(BaseModel):
     sample_rate: Optional[int] = 22050
 
 class QualityCheckConfig(AudioQualityParams):
-    checks: Optional[List[str]] = None
+    checks: Optional[List[str]] = None  # Will accept: 'dur', 'rms', 'clip', 'snr', 'flat'
 
 class AudioQualityChecker:
+    CHECK_MAPPING = {
+        'dur': 'check_duration',
+        'rms': 'check_rms',
+        'clip': 'check_clipping',
+        'snr': 'check_snr',
+        'flat': 'check_spectral_flatness'
+    }
     def __init__(self, params: Optional[AudioQualityParams] = None):
         if params is None:
             params = AudioQualityParams()
@@ -72,42 +79,45 @@ class AudioQualityChecker:
         flatness = np.mean(geometric_mean / (arithmetic_mean + 1e-10))
         return self.min_spectral_flatness <= flatness <= self.max_spectral_flatness, flatness
 
-    def check_quality(self, audio: np.ndarray, bypass_quality_checks: bool = False) -> Tuple[bool, Dict[str, float]]:
+    def check_quality(self, audio: np.ndarray, config: Optional[QualityCheckConfig] = None) -> Tuple[bool, Dict[str, float]]:
         metrics = {}
+        all_passed = True
 
-        # Check duration
+        # Always check duration first
         duration_ok, metrics['duration'] = self.check_duration(audio)
         if not duration_ok:
             return False, metrics
-
-        if bypass_quality_checks:
-            return True, metrics
 
         # Quick silence check
         if np.max(np.abs(audio)) < 0.01:
             return False, metrics
 
-        # Check RMS
-        rms_ok, metrics['rms_db'] = self.check_rms(audio)
-        if not rms_ok:
-            return False, metrics
+        checks_to_run = []
+        if config and config.checks:
+            checks_to_run = [
+                check for check in config.checks 
+                if check in self.CHECK_MAPPING
+            ]
+        else:
+            # If no checks specified, run all checks
+            checks_to_run = list(self.CHECK_MAPPING.keys())
 
-        # Check clipping
-        clipping_ok, metrics['clipping_ratio'] = self.check_clipping(audio)
-        if not clipping_ok:
-            return False, metrics
+        check_methods = {
+            'dur': (self.check_duration, 'duration'),
+            'rms': (self.check_rms, 'rms_db'),
+            'clip': (self.check_clipping, 'clipping_ratio'),
+            'snr': (self.check_snr, 'snr_db'),
+            'flat': (self.check_spectral_flatness, 'spectral_flatness')
+        }
 
-        # Check SNR
-        snr_ok, metrics['snr_db'] = self.check_snr(audio)
-        if not snr_ok:
-            return False, metrics
+        for check in checks_to_run:
+            if check in check_methods:
+                check_func, metric_name = check_methods[check]
+                check_ok, value = check_func(audio)
+                metrics[metric_name] = value
+                all_passed = all_passed and check_ok
 
-        # Check spectral flatness
-        flatness_ok, metrics['spectral_flatness'] = self.check_spectral_flatness(audio)
-        if not flatness_ok:
-            return False, metrics
-
-        return True, metrics
+        return all_passed, metrics
 
     def get_metric_analysis(self, metrics: Dict[str, float]) -> List[Dict[str, str]]:
         analysis = []
