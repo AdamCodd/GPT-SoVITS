@@ -412,10 +412,7 @@ async def check_audio(
         )
         
         # Process audio and get results
-        passed, metrics, analysis = checker.process_audio(
-            audio_stream, 
-            config.checks if config else None
-        )
+        passed, metrics, analysis = checker.process_audio(audio_stream)
 
         return JSONResponse({
             "passed": passed,
