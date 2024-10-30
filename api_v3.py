@@ -379,7 +379,7 @@ class AudioCheckRequest(BaseModel):
 @APP.post("/checkaudio")
 async def check_audio(
     file: UploadFile = File(...),
-    config: Optional[AudioCheckRequest] = None
+    config: Optional[AudioCheckRequest] = Form(None)
 ):
     MAX_FILE_SIZE = 100 * 1024 * 1024 # 100MB
     try:
@@ -413,11 +413,28 @@ async def check_audio(
         
         # Process audio and get results
         passed, metrics, analysis = checker.process_audio(audio_stream)
+        
+        # Convert all NumPy types to Python native types
+        def convert_numpy_types(obj):
+            if isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, dict):
+                return {key: convert_numpy_types(value) for key, value in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [convert_numpy_types(item) for item in obj]
+            return obj
 
+        # Convert all results to JSON-serializable types
         return JSONResponse({
-            "passed": passed,
-            "metrics": metrics,
-            "analysis": analysis
+            "passed": bool(passed),
+            "metrics": convert_numpy_types(metrics),
+            "analysis": convert_numpy_types(analysis)
         })
 
     except Exception as e:
@@ -451,4 +468,4 @@ if __name__ == "__main__":
     except Exception as e:
         traceback.print_exc()
         os.kill(os.getpid(), signal.SIGTERM)
-        exit(0)
+        exit(0) 
