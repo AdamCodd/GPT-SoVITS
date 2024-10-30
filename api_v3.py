@@ -380,18 +380,30 @@ async def check_audio(
     file: UploadFile = File(...),
     config: Optional[AudioCheckRequest] = None
 ):
+    MAX_FILE_SIZE = 100 * 1024 * 1024 # 100MB
     try:
-        # Check if file is empty
-        audio_data = await file.read()
-        if not audio_data:
-            raise HTTPException(status_code=400, detail="Empty audio file")
+        # Check file size from headers (if available)
+        file_size = file.size  # FastAPI provides this from Content-Length header
+        if file_size and file_size > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large")
             
         # Check file type
         content_type = file.content_type
         if not content_type or not content_type.startswith('audio/'):
             raise HTTPException(status_code=400, detail="File must be an audio file")
 
-        audio_stream = io.BytesIO(audio_data)
+        # Read in chunks and process
+        CHUNK_SIZE = 1024 * 1024  # 1MB chunks
+        audio_stream = io.BytesIO()
+        first_chunk = True
+        
+        while chunk := await file.read(CHUNK_SIZE):
+            if first_chunk and not chunk:  # Check if first chunk is empty
+                raise HTTPException(status_code=400, detail="Empty audio file")
+            first_chunk = False
+            audio_stream.write(chunk)
+        
+        audio_stream.seek(0)  # Reset stream position to beginning
         
         # Initialize checker
         checker = AudioQualityChecker(
