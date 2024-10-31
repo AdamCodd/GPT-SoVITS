@@ -105,17 +105,17 @@ class TTS_Config:
     v1_languages:list = ["auto", "en", "zh", "ja",  "all_zh", "all_ja"]
     v2_languages:list = ["auto", "auto_yue", "en", "zh", "ja", "yue", "ko", "all_zh", "all_ja", "all_yue", "all_ko"]
     languages:list = v2_languages
-    # "all_zh",#全部按中文识别
-    # "en",#全部按英文识别#######不变
-    # "all_ja",#全部按日文识别
-    # "all_yue",#全部按中文识别
-    # "all_ko",#全部按韩文识别
-    # "zh",#按中英混合识别####不变
-    # "ja",#按日英混合识别####不变
-    # "yue",#按粤英混合识别####不变
-    # "ko",#按韩英混合识别####不变
-    # "auto",#多语种启动切分识别语种
-    # "auto_yue",#多语种启动切分识别语种
+    # "all_zh": All in Chinese
+    # "en": All in English
+    # "all_ja": All in Japanese
+    # "all_yue": All in Cantonese
+    # "all_ko": All in Korean
+    # "zh": Mixture of English and Chinese
+    # "ja": Mixture of English and Japanese
+    # "yue": Mixture of English and Cantonese
+    # "ko": Mixture of English and Korean
+    # "auto": Multilingual check before cutting
+    # "auto_yue": Chinese/Cantonese check before cutting
 
     def __init__(self, configs: Union[dict, str]=None):
         
