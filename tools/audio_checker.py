@@ -116,18 +116,22 @@ class AudioQualityChecker:
     def check_spectral_flatness(self, audio: np.ndarray) -> Tuple[bool, float]:
         if len(audio) == 0:
             return False, 0.0
-        n_fft = min(2048, len(audio))
+        n_fft = max(512, min(2048, len(audio)))  # Maintain minimum for stability
         hop_length = min(512, n_fft // 2)
+        # Compute STFT and ensure numerical stability
         spec = np.abs(librosa.stft(audio, n_fft=n_fft, hop_length=hop_length))
         epsilon = 1e-10
         spec = np.maximum(spec, epsilon)
-        geometric_mean = np.exp(np.mean(np.log(spec + epsilon), axis=0))
-        arithmetic_mean = np.mean(spec, axis=0)
-        arithmetic_mean = np.maximum(arithmetic_mean, epsilon)
+        # Calculate geometric and arithmetic means
+        geometric_mean = np.exp(np.mean(np.log(spec), axis=0))
+        arithmetic_mean = np.maximum(np.mean(spec, axis=0), epsilon)
+        # Compute spectral flatness
         flatness = float(np.mean(geometric_mean / arithmetic_mean))
+        # Return boolean check within range and the flatness value
         if not np.isfinite(flatness):
             return False, 0.0
-        return self.min_spectral_flatness <= flatness <= self.max_spectral_flatness, flatness
+        is_within_range = self.min_spectral_flatness <= flatness <= self.max_spectral_flatness
+        return is_within_range, flatness
     
     def check_quality(self, audio: np.ndarray, config: Optional[QualityCheckConfig] = None) -> Tuple[bool, Dict[str, float]]:
         metrics = {}
