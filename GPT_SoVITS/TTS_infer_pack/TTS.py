@@ -752,7 +752,7 @@ class TTS:
             prompt_text = prompt_text.strip("\n")
             if (prompt_text[-1] not in splits): prompt_text += "。" if prompt_lang != "en" else "."
             print(i18n("实际输入的参考文本:"), prompt_text)
-            if self.prompt_cache["prompt_text"] != prompt_text:
+            if self.prompt_cache["prompt_text"] != prompt_text or self.prompt_cache["prompt_lang"] != prompt_lang:
                 self.prompt_cache["prompt_text"] = prompt_text
                 self.prompt_cache["prompt_lang"] = prompt_lang
                 phones, bert_features, norm_text = \
