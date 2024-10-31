@@ -414,27 +414,11 @@ async def check_audio(
         # Process audio and get results
         passed, metrics, analysis = checker.process_audio(audio_stream)
         
-        # Convert all NumPy types to Python native types
-        def convert_numpy_types(obj):
-            if isinstance(obj, np.integer):
-                return int(obj)
-            elif isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, np.bool_):
-                return bool(obj)
-            elif isinstance(obj, dict):
-                return {key: convert_numpy_types(value) for key, value in obj.items()}
-            elif isinstance(obj, (list, tuple)):
-                return [convert_numpy_types(item) for item in obj]
-            return obj
-
-        # Convert all results to JSON-serializable types
+        # Return results directly since they're already converted to Python types
         return JSONResponse({
             "passed": bool(passed),
-            "metrics": convert_numpy_types(metrics),
-            "analysis": convert_numpy_types(analysis)
+            "metrics": metrics,
+            "analysis": analysis
         })
 
     except Exception as e:
