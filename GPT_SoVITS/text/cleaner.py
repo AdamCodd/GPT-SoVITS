@@ -9,6 +9,7 @@ import os
 
 from text import symbols as symbols_v1
 from text import symbols2 as symbols_v2
+from text.custom_arpabet import CustomArpabetProcessor
 
 special = [
     # ("%", "zh", "SP"),
@@ -43,7 +44,9 @@ def clean_text(text, language, version=None):
         assert len(phones) == sum(word2ph)
         assert len(norm_text) == len(word2ph)
     elif language == "en":
-        phones = language_module.g2p(norm_text)
+        phones = CustomArpabetProcessor.g2p(symbols,
+            text, language_module)
+        #phones = language_module.g2p(norm_text)
         if len(phones) < 4:
             phones = [','] + phones
         word2ph = None
