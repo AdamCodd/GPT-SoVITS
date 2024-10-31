@@ -95,30 +95,11 @@ class AudioQualityChecker:
         arithmetic_mean = np.mean(spec, axis=0)
         flatness = np.mean(geometric_mean / (arithmetic_mean + 1e-10))
         return self.min_spectral_flatness <= flatness <= self.max_spectral_flatness, flatness
-
+    
     def check_quality(self, audio: np.ndarray, config: Optional[QualityCheckConfig] = None) -> Tuple[bool, Dict[str, float]]:
         metrics = {}
         all_passed = True
-
-        # Always check duration first
-        duration_ok, metrics['duration'] = self.check_duration(audio)
-        if not duration_ok:
-            return False, metrics
-
-        # Quick silence check
-        if np.max(np.abs(audio)) < 0.01:
-            return False, metrics
-
-        checks_to_run = []
-        if config and config.checks:
-            checks_to_run = [
-                check for check in config.checks 
-                if check in self.CHECK_MAPPING
-            ]
-        else:
-            # If no checks specified, run all checks
-            checks_to_run = list(self.CHECK_MAPPING.keys())
-
+    
         check_methods = {
             'dur': (self.check_duration, 'duration'),
             'rms': (self.check_rms, 'rms_db'),
@@ -126,14 +107,24 @@ class AudioQualityChecker:
             'snr': (self.check_snr, 'snr_db'),
             'flat': (self.check_spectral_flatness, 'spectral_flatness')
         }
-
+    
+        # Determine which checks to run
+        checks_to_run = []
+        if config and config.checks:
+            checks_to_run = [
+                check for check in config.checks 
+                if check in check_methods
+            ]
+        else:
+            checks_to_run = list(check_methods.keys())
+    
+        # Run the determined checks
         for check in checks_to_run:
-            if check in check_methods:
-                check_func, metric_name = check_methods[check]
-                check_ok, value = check_func(audio)
-                metrics[metric_name] = value
-                all_passed = all_passed and check_ok
-
+            check_func, metric_name = check_methods[check]
+            check_ok, value = check_func(audio)
+            metrics[metric_name] = value
+            all_passed = all_passed and check_ok
+    
         return all_passed, metrics
 
     def get_metric_analysis(self, metrics: Dict[str, float]) -> List[Dict[str, str]]:
