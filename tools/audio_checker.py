@@ -152,8 +152,10 @@ class AudioQualityChecker:
                 check for check in config.checks 
                 if check in check_methods
             ]
+            print(f"Running only these checks: {checks_to_run}")  # Debug log
         else:
             checks_to_run = list(check_methods.keys())
+            print("Running all checks")  # Debug log
     
         # Run the determined checks
         for check in checks_to_run:
