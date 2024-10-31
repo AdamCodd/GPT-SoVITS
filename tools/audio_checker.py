@@ -41,14 +41,14 @@ class AudioQualityChecker:
         self.sample_rate = params.sample_rate
         self.duration = None  # Will be set during check_quality
         self.current_sample_rate = None  # Will be set during check_quality
-
-    def process_audio(self, audio_path: str) -> Tuple[bool, Dict[str, float], Optional[List[Dict[str, str]]]]:
+    
+    def process_audio(self, audio_path: str, config: Optional[QualityCheckConfig] = None) -> Tuple[bool, Dict[str, float], Optional[List[Dict[str, str]]]]:
         try:
             # Load audio file
             audio, sr = librosa.load(audio_path, sr=self.sample_rate)
             
-            # Perform quality checks
-            passed, metrics = self.check_quality(audio)
+            # Perform quality checks with config
+            passed, metrics = self.check_quality(audio, config)
             
             # Generate analysis if quality checks completed
             analysis = self.get_metric_analysis(metrics) if metrics else None
