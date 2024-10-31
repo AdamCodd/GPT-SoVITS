@@ -334,10 +334,14 @@ def cut7(inp):
     }
     
     QUOTE_PAIRS = {
-        '「': '」', '『': '』', '（': '）', '【': '】',
-        '"': '"', ''': ''',  # Added Western quotes
+        '「': '」', 
+        '『': '』', 
+        '（': '）', 
+        '【': '】',
+        '"': '"', 
+        "'": "'"  # Fixed the syntax for Western quotes
     }
-    
+        
     def handle_quotes(text, pos):
         if text[pos] in QUOTE_PAIRS:
             end_pos = pos + 1
