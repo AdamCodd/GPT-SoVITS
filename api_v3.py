@@ -319,7 +319,16 @@ async def tts_post_endpoint(
             print(f"Received {len(aux_ref_audio_files)} auxiliary files")
             for idx, aux_file in enumerate(aux_ref_audio_files):
                 print(f"Auxiliary file {idx}: {aux_file.filename}")
-
+        
+        # Auto-adjust text_split_method based on language only if not provided
+        if text_split_method is None or text_split_method.strip() == "":
+            if text_lang.lower() == 'en':
+                text_split_method = 'cut6'
+            elif text_lang.lower() in ['ja', 'all_ja']:
+                text_split_method = 'cut7'
+            else:
+                text_split_method = 'cut5'  # Fallback
+                
         request = TTS_Request(
             text=text,
             text_lang=text_lang,
