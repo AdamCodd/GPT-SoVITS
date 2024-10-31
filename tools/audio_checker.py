@@ -60,40 +60,73 @@ class AudioQualityChecker:
             return False, {}, None
 
     def check_duration(self, audio: np.ndarray) -> Tuple[bool, float]:
-        duration = len(audio) / self.sample_rate
+        duration = float(len(audio) / self.sample_rate)
         self.duration = duration
         self.current_sample_rate = self.sample_rate
+        if not np.isfinite(duration):
+            return False, 0.0
         return self.min_duration <= duration <= self.max_duration, duration
 
     def check_rms(self, audio: np.ndarray) -> Tuple[bool, float]:
-        rms_value = np.sqrt(np.mean(np.square(audio)))
-        rms_db = 20 * np.log10(rms_value)
+        if len(audio) == 0:
+            return False, -100.0
+        rms_value = float(np.sqrt(np.mean(np.square(audio))))
+        if rms_value <= 0 or not np.isfinite(rms_value):
+            return False, -100.0
+        rms_db = float(20 * np.log10(max(rms_value, 1e-10)))
+        if not np.isfinite(rms_db):
+            return False, -100.0
         return self.min_rms_db <= rms_db <= self.max_rms_db, rms_db
 
     def check_clipping(self, audio: np.ndarray) -> Tuple[bool, float]:
+        if len(audio) == 0:
+            return False, 1.0
         clipping_mask = np.abs(audio) > 0.99
-        clipping_ratio = np.mean(clipping_mask)
+        clipping_ratio = float(np.mean(clipping_mask))
+        if not np.isfinite(clipping_ratio):
+            return False, 1.0
         return clipping_ratio <= self.max_clipping_ratio, clipping_ratio
 
     def estimate_noise_floor(self, audio: np.ndarray) -> float:
-        frame_length = 2048
-        hop_length = 512
+        if len(audio) == 0:
+            return 1e-10
+        frame_length = min(2048, len(audio))
+        hop_length = min(512, frame_length // 2)
         frames = librosa.util.frame(audio, frame_length=frame_length, hop_length=hop_length)
         frame_rms = np.sqrt(np.mean(frames**2, axis=0))
-        noise_threshold = np.percentile(frame_rms, 5)
+        noise_threshold = float(np.percentile(frame_rms, 5))
+        if not np.isfinite(noise_threshold) or noise_threshold <= 0:
+            return 1e-10
         return noise_threshold**2
 
     def check_snr(self, audio: np.ndarray) -> Tuple[bool, float]:
+        if len(audio) == 0:
+            return False, 0.0
         noise_floor = self.estimate_noise_floor(audio)
-        signal_power = np.mean(np.square(audio))
-        snr = 10 * np.log10(signal_power / noise_floor) if noise_floor > 0 else float('inf')
+        signal_power = float(np.mean(np.square(audio)))
+        if not np.isfinite(signal_power) or signal_power <= 0:
+            return False, 0.0
+        if noise_floor <= 0:
+            noise_floor = 1e-10
+        snr = float(10 * np.log10(signal_power / noise_floor))
+        if not np.isfinite(snr):
+            return False, 0.0
         return snr >= self.min_snr_db, snr
 
     def check_spectral_flatness(self, audio: np.ndarray) -> Tuple[bool, float]:
-        spec = np.abs(librosa.stft(audio, n_fft=2048, hop_length=512))
-        geometric_mean = np.exp(np.mean(np.log(spec + 1e-10), axis=0))
+        if len(audio) == 0:
+            return False, 0.0
+        n_fft = min(2048, len(audio))
+        hop_length = min(512, n_fft // 2)
+        spec = np.abs(librosa.stft(audio, n_fft=n_fft, hop_length=hop_length))
+        epsilon = 1e-10
+        spec = np.maximum(spec, epsilon)
+        geometric_mean = np.exp(np.mean(np.log(spec + epsilon), axis=0))
         arithmetic_mean = np.mean(spec, axis=0)
-        flatness = np.mean(geometric_mean / (arithmetic_mean + 1e-10))
+        arithmetic_mean = np.maximum(arithmetic_mean, epsilon)
+        flatness = float(np.mean(geometric_mean / arithmetic_mean))
+        if not np.isfinite(flatness):
+            return False, 0.0
         return self.min_spectral_flatness <= flatness <= self.max_spectral_flatness, flatness
     
     def check_quality(self, audio: np.ndarray, config: Optional[QualityCheckConfig] = None) -> Tuple[bool, Dict[str, float]]:
