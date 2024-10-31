@@ -12,6 +12,7 @@ from text import chinese
 from typing import Dict, List, Tuple
 from text.cleaner import clean_text
 from text import cleaned_text_to_sequence
+from text.custom_arpabet import CustomArpabetProcessor
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 from TTS_infer_pack.text_segmentation_method import split_big_text, splits, get_method as get_seg_method
 
@@ -20,7 +21,7 @@ from tools.i18n.i18n import I18nAuto, scan_language_list
 language=os.environ.get("language","Auto")
 language=sys.argv[-1] if sys.argv[-1] in scan_language_list() else language
 i18n = I18nAuto(language=language)
-punctuation = set(['!', '?', '…', ',', '.', '-'])
+punctuation = set(['!', '?', '…', ',', '.', '-'," "])
 
 def get_first(text:str) -> str:
     pattern = "[" + "".join(re.escape(sep) for sep in splits) + "]"
@@ -119,7 +120,13 @@ class TextPreprocessor:
     def get_phones_and_bert(self, text:str, language:str, version:str, final:bool=False):
         if language in {"en", "all_zh", "all_ja", "all_ko", "all_yue"}:
             language = language.replace("all_","")
-            formattext = text
+            if language == "en":
+                LangSegment.setfilters(["en"])
+                #formattext = " ".join(tmp["text"] for tmp in LangSegment.getTexts(text))
+                formattext = CustomArpabetProcessor.segment(LangSegment, text)
+            else:
+                # 因无法区别中日韩文汉字,以用户输入为准
+                formattext = text
             while "  " in formattext:
                 formattext = formattext.replace("  ", " ")
             if language == "zh":
