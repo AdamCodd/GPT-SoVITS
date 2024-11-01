@@ -580,6 +580,7 @@ class Text2SemanticDecoder(nn.Module):
         prompts:torch.LongTensor,  ####参考音频token
         bert_feature:List[torch.LongTensor],
         top_k: int = -100,
+        min_p: float = 0.0,
         top_p: int = 100,
         early_stop_num: int = -1,
         temperature: float = 1.0,
@@ -588,7 +589,7 @@ class Text2SemanticDecoder(nn.Module):
     ):
         if prompts is None:
             print("Warning: Prompt free is not supported batch_infer! switch to naive_infer")
-            return self.infer_panel_naive_batched(x, x_lens, prompts, bert_feature, top_k=top_k, top_p=top_p, early_stop_num=early_stop_num, temperature=temperature, **kwargs)
+            return self.infer_panel_naive_batched(x, x_lens, prompts, bert_feature, top_k=top_k, min_p=min_p, top_p=top_p, early_stop_num=early_stop_num, temperature=temperature, **kwargs)
 
 
         max_len = kwargs.get("max_len",x_lens.max())
@@ -684,7 +685,7 @@ class Text2SemanticDecoder(nn.Module):
                 xy_attn_mask = F.pad(xy_attn_mask,(0,1),value=False)
 
             samples = sample(
-                    logits, y, top_k=top_k, top_p=top_p, repetition_penalty=repetition_penalty, temperature=temperature
+                    logits, y, top_k=top_k, min_p=min_p, top_p=top_p, repetition_penalty=repetition_penalty, temperature=temperature
                 )[0]
 
             y = torch.concat([y, samples], dim=1)
@@ -756,6 +757,7 @@ class Text2SemanticDecoder(nn.Module):
         prompts:torch.LongTensor,  ####参考音频token
         bert_feature:List[torch.LongTensor],
         top_k: int = -100,
+        min_p: float = 0.0,
         top_p: int = 100,
         early_stop_num: int = -1,
         temperature: float = 1.0,
@@ -770,6 +772,7 @@ class Text2SemanticDecoder(nn.Module):
                                                   prompts[i].unsqueeze(0) if prompts is not None else None, 
                                                   bert_feature[i].unsqueeze(0), 
                                                   top_k, 
+                                                  min_p,
                                                   top_p, 
                                                   early_stop_num, 
                                                   temperature,
@@ -787,6 +790,7 @@ class Text2SemanticDecoder(nn.Module):
         prompts:torch.LongTensor,  ####参考音频token
         bert_feature:torch.LongTensor,
         top_k: int = -100,
+        min_p: float = 0.0,
         top_p: int = 100,
         early_stop_num: int = -1,
         temperature: float = 1.0,
@@ -858,7 +862,7 @@ class Text2SemanticDecoder(nn.Module):
                 logits = logits[:, :-1]
 
             samples = sample(
-                logits, y, top_k=top_k, top_p=top_p, repetition_penalty=repetition_penalty, temperature=temperature
+                logits, y, top_k=top_k, min_p=min_p, top_p=top_p, repetition_penalty=repetition_penalty, temperature=temperature
             )[0]
 
             y = torch.concat([y, samples], dim=1)
@@ -892,10 +896,11 @@ class Text2SemanticDecoder(nn.Module):
         prompts:torch.LongTensor,  ####参考音频token
         bert_feature:torch.LongTensor,
         top_k: int = -100,
+        min_p: float = 0.0,
         top_p: int = 100,
         early_stop_num: int = -1,
         temperature: float = 1.0,
         repetition_penalty: float = 1.35,
         **kwargs
     ):
-        return self.infer_panel_naive(x, x_lens, prompts, bert_feature, top_k, top_p, early_stop_num, temperature, repetition_penalty, **kwargs)
+        return self.infer_panel_naive(x, x_lens, prompts, bert_feature, top_k, min_p, top_p, early_stop_num, temperature, repetition_penalty, **kwargs)
