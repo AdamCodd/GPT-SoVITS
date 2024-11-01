@@ -67,8 +67,9 @@ class TTS_Request(BaseModel):
     prompt_lang: str = None
     prompt_text: str = ""
     top_k: int = 5
-    top_p: float = 1
-    temperature: float = 1
+    min_p: float = 0.0
+    top_p: float = 1.0
+    temperature: float = 1.0
     text_split_method: str = "cut5"
     batch_size: int = 1
     batch_threshold: float = 0.75
@@ -297,6 +298,7 @@ async def tts_post_endpoint(
     prompt_lang: str = Form(...),
     prompt_text: str = Form(""),
     top_k: int = Form(5),
+    min_p: float = Form(0.0),
     top_p: float = Form(1.0),
     temperature: float = Form(1.0),
     text_split_method: str = Form("cut5"),
@@ -319,7 +321,7 @@ async def tts_post_endpoint(
             print(f"Received {len(aux_ref_audio_files)} auxiliary files")
             for idx, aux_file in enumerate(aux_ref_audio_files):
                 print(f"Auxiliary file {idx}: {aux_file.filename}")
-        
+
         # Auto-adjust text_split_method based on language only if not provided
         if text_split_method is None or text_split_method.strip() == "":
             if text_lang.lower() == 'en':
@@ -328,7 +330,7 @@ async def tts_post_endpoint(
                 text_split_method = 'cut7'
             else:
                 text_split_method = 'cut5'  # Fallback
-                
+
         request = TTS_Request(
             text=text,
             text_lang=text_lang,
@@ -339,6 +341,7 @@ async def tts_post_endpoint(
             prompt_lang=prompt_lang,
             prompt_text=prompt_text,
             top_k=top_k,
+            min_p=min_p,
             top_p=top_p,
             temperature=temperature,
             text_split_method=text_split_method,
@@ -390,13 +393,13 @@ async def check_audio(
     file: UploadFile = File(...),
     config: Optional[AudioCheckRequest] = Form(None)
 ):
-    MAX_FILE_SIZE = 100 * 1024 * 1024 # 100MB
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
     try:
         # Check file size from headers (if available)
         file_size = file.size  # FastAPI provides this from Content-Length header
         if file_size and file_size > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail="File too large")
-            
+        
         # Check file type
         content_type = file.content_type
         if not content_type or not content_type.startswith('audio/'):
@@ -406,15 +409,15 @@ async def check_audio(
         CHUNK_SIZE = 1024 * 1024  # 1MB chunks
         audio_stream = io.BytesIO()
         first_chunk = True
-        
+
         while chunk := await file.read(CHUNK_SIZE):
             if first_chunk and not chunk:  # Check if first chunk is empty
                 raise HTTPException(status_code=400, detail="Empty audio file")
             first_chunk = False
             audio_stream.write(chunk)
-        
+
         audio_stream.seek(0)  # Reset stream position to beginning
-        
+
         # Initialize checker
         checker = AudioQualityChecker(
             params=config.params if config and config.params else None
@@ -422,7 +425,7 @@ async def check_audio(
         
         # Process audio and get results
         passed, metrics, analysis = checker.process_audio(audio_stream)
-        
+
         # Return results directly since they're already converted to Python types
         return JSONResponse({
             "passed": bool(passed),
