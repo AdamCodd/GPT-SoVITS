@@ -397,7 +397,7 @@ def merge_short_text_in_array(texts, threshold):
 ##ref_wav_path+prompt_text+prompt_language+text(单个)+text_language+top_k+top_p+temperature
 # cache_tokens={}#暂未实现清理机制
 cache= {}
-def get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language, how_to_cut=i18n("不切"), top_k=20, top_p=0.6, temperature=0.6, ref_free 
+def get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language, how_to_cut=i18n("不切"), top_k=20, min_p=0.0, top_p=0.6, temperature=0.6, ref_free 
     =False,speed=1,if_freeze=False,inp_refs=None):
     global cache
     if ref_wav_path:pass
@@ -502,6 +502,7 @@ def get_tts_wav(ref_wav_path, prompt_text, prompt_language, text, text_language,
                     bert,
                     # prompt_phone_len=ph_offset,
                     top_k=top_k,
+                    min_p=min_p,
                     top_p=top_p,
                     temperature=temperature,
                     early_stop_num=hz * max_sec,
@@ -728,6 +729,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
                 speed = gr.Slider(minimum=0.6,maximum=1.65,step=0.05,label=i18n("语速"),value=1,interactive=True, scale=1)
                 gr.Markdown(html_center(i18n("GPT采样参数(无参考文本时不要太低。不懂就用默认)：")))
                 top_k = gr.Slider(minimum=1,maximum=100,step=1,label=i18n("top_k"),value=15,interactive=True, scale=1)
+                min_p = gr.Slider(minimum=0,maximum=1,step=0.05,label=i18n("min_p"),value=0.0,interactive=True, scale=1)
                 top_p = gr.Slider(minimum=0,maximum=1,step=0.05,label=i18n("top_p"),value=1,interactive=True, scale=1)
                 temperature = gr.Slider(minimum=0,maximum=1,step=0.05,label=i18n("temperature"),value=1,interactive=True,  scale=1) 
             # with gr.Column():
@@ -740,7 +742,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI") as app:
 
         inference_button.click(
             get_tts_wav,
-            [inp_ref, prompt_text, prompt_language, text, text_language, how_to_cut, top_k, top_p, temperature, ref_text_free,speed,if_freeze,inp_refs],
+            [inp_ref, prompt_text, prompt_language, text, text_language, how_to_cut, top_k, min_p, top_p, temperature, ref_text_free,speed,if_freeze,inp_refs],
             [output],
         )
         SoVITS_dropdown.change(change_sovits_weights, [SoVITS_dropdown,prompt_language,text_language], [prompt_language,text_language,prompt_text,prompt_language,text,text_language])
