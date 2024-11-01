@@ -1,6 +1,7 @@
-This repository is mainly focused on improving the API part of this project (not the webUI).
+This repository is mainly focused on improving the API part of this project (not really the webUI).
 
 ## New Features
+- Added min_p sampler for inference (API and WebUI)
 - ARPAbet support for inference (english only) [Thanks to effusiveperiscope]: 
     * Type in ARPAbet in curly braces, e.g. {D IH0 S P EH1 N S ER0}
     * Vowel stress numbers are required.
