@@ -4,6 +4,7 @@ This repository is mainly focused on improving the API part of this project (not
 - ARPAbet support for inference (english only) [Thanks to effusiveperiscope]: 
     * Type in ARPAbet in curly braces, e.g. {D IH0 S P EH1 N S ER0}
     * Vowel stress numbers are required.
+- Improved Cantonese pronunciation with ToJyutping [Thanks to Naozumi520]
 - New /checkaudio endpoint to assess the audio quality (Duration, RMS level, Signal-to-noise ratio, clipping, spectral flatness)
 - Added improved segmentation methods for EN/JP
 - Added upload audio capabilities for the main reference/auxiliary audio files
