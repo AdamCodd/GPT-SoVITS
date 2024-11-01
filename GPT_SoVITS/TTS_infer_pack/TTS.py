@@ -3,6 +3,7 @@ import math
 import os, sys, gc
 import random
 import traceback
+import warnings
 
 from tqdm import tqdm
 now_dir = os.getcwd()
@@ -455,8 +456,16 @@ class TTS:
         )
         with torch.no_grad():
             wav16k, sr = librosa.load(ref_wav_path, sr=16000)
-            if (wav16k.shape[0] > 160000 or wav16k.shape[0] < 48000):
-                raise OSError(i18n("参考音频在3~10秒范围外，请更换！"))
+
+           #if (wav16k.shape[0] > 160000 or wav16k.shape[0] < 48000):
+           #    raise OSError(i18n("参考音频在3~10秒范围外，请更换！"))
+          
+            # Check audio length and issue warnings instead of raising errors
+            if wav16k.shape[0] > 160000:  # > 10 seconds
+                warnings.warn("Long reference audio can have adverse effects on pronunciation and memory usage")
+            elif wav16k.shape[0] < 48000:  # < 3 seconds
+                warnings.warn("Short reference audio can have adverse effects on character resemblance and audio quality")
+              
             wav16k = torch.from_numpy(wav16k)
             zero_wav_torch = torch.from_numpy(zero_wav)
             wav16k = wav16k.to(self.configs.device)
