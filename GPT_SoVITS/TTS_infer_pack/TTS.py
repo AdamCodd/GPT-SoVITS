@@ -3,7 +3,6 @@ import math
 import os, sys, gc
 import random
 import traceback
-import warnings
 
 from tqdm import tqdm
 now_dir = os.getcwd()
@@ -462,9 +461,9 @@ class TTS:
           
             # Check audio length and issue warnings instead of raising errors
             if wav16k.shape[0] > 160000:  # > 10 seconds
-                warnings.warn("Long reference audio can have adverse effects on pronunciation and memory usage")
+                print("⚠️ Warning: Long reference audio detected (>10s). This can have adverse effects on pronunciation and memory usage.", file=sys.stderr)
             elif wav16k.shape[0] < 48000:  # < 3 seconds
-                warnings.warn("Short reference audio can have adverse effects on character resemblance and audio quality")
+                print("⚠️ Warning: Short reference audio detected (<3s). This can have adverse effects on character resemblance and audio quality.", file=sys.stderr)
               
             wav16k = torch.from_numpy(wav16k)
             zero_wav_torch = torch.from_numpy(zero_wav)
