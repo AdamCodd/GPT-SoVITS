@@ -1,3 +1,5 @@
+This repository is mainly focused on improving the API part of this project (not the webUI).
+
 ## New Features
 - ARPAbet support for inference (english only)
 - New /checkaudio endpoint to assess the audio quality (Duration, RMS level, Signal-to-noise ratio, clipping, spectral flatness)
