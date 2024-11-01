@@ -71,6 +71,42 @@ class WhisperPipelineTranscriber:
         except Exception as e:
             raise Exception(f"Failed to load audio file {audio_path}: {str(e)}")
 
+    def detect_language(
+        self,
+        audio_input: Union[str, List[str]]
+    ) -> Union[Dict[str, float], List[Dict[str, Dict[str, float]]]]:
+        """
+        Detect the language(s) spoken in the audio file(s)
+        """
+        try:
+            if isinstance(audio_input, list):
+                # Handle multiple files
+                audio_inputs = [self._load_audio(path) for path in audio_input]
+                predictions = self.lang_pipeline(audio_inputs)
+                
+                return [
+                    {
+                        "file": audio_path,
+                        "languages": {
+                            pred["label"]: pred["score"]
+                            for pred in file_pred
+                        }
+                    }
+                    for audio_path, file_pred in zip(audio_input, predictions)
+                ]
+            else:
+                # Handle single file
+                audio = self._load_audio(audio_input)
+                predictions = self.lang_pipeline(audio)
+                
+                return {
+                    pred["label"]: pred["score"]
+                    for pred in predictions
+                }
+
+        except Exception as e:
+            raise Exception(f"Language detection failed: {str(e)}")
+    
     def transcribe(
         self,
         audio_input: Union[str, List[str]],
@@ -146,4 +182,17 @@ results = transcriber.transcribe(
     ["audio1.wav", "audio2.wav"],
     translate=True, # Always translate to english regardless of the source language
 )
+
+### Language detection
+# Detect language for a single file
+lang_result = transcriber.detect_language("audio.wav")
+# Returns: {"en": 0.98, "fr": 0.01, ...}
+
+# Detect language for multiple files
+lang_results = transcriber.detect_language(["audio1.wav", "audio2.wav"])
+# Returns: [
+#     {"file": "audio1.wav", "languages": {"en": 0.98, "fr": 0.01, ...}},
+#     {"file": "audio2.wav", "languages": {"es": 0.95, "pt": 0.03, ...}}
+# ]
+
 """
