@@ -97,15 +97,25 @@ class TTS_Request(BaseModel):
         # Handle auxiliary files/paths
         if self.aux_ref_audio_files and self.aux_ref_audio_paths:
             raise ValueError("Cannot provide both aux_ref_audio_files and aux_ref_audio_paths")
+        
         aux_paths = []
-
         if self.aux_ref_audio_files:
-            for file in self.aux_ref_audio_files:
-                aux_paths.append(str(await save_uploaded_file(file)))
+            aux_paths = [str(await save_uploaded_file(file)) for file in self.aux_ref_audio_files]
         elif self.aux_ref_audio_paths:
             aux_paths = self.aux_ref_audio_paths
 
         return main_ref_path, aux_paths
+
+    async def process_asr(self, main_ref_path: str) -> None:
+        """Process ASR if needed and populate prompt_lang and prompt_text"""
+        if not self.prompt_lang or not self.prompt_text:
+            transcriber = WhisperPipelineTranscriber()
+            
+            if not self.prompt_text:
+                self.prompt_text = transcriber.transcribe(main_ref_path)
+            
+            if not self.prompt_lang:
+                self.prompt_lang = transcriber.detect_language(main_ref_path)
 
 
 def wave_header_chunk(frame_input: bytes = b"", channels: int = 1, 
@@ -169,26 +179,23 @@ def check_params(req: Dict) -> Optional[JSONResponse]:
     text = req.get("text", "")
     text_lang = req.get("text_lang", "").lower()
     ref_audio_path = req.get("ref_audio_path", "")
-    ref_audio_file = req.get("ref_audio_file", None)
-    streaming_mode = req.get("streaming_mode", False)
-    media_type = req.get("media_type", "wav")
     prompt_lang = req.get("prompt_lang", "").lower()
+    media_type = req.get("media_type", "wav")
+    streaming_mode = req.get("streaming_mode", False)
     text_split_method = req.get("text_split_method", "cut5")
 
-    # Basic required field validation
-    if not ref_audio_file and not ref_audio_path:
-        return JSONResponse(status_code=400, content={"message": "Must provide either ref_audio_file or ref_audio_path"})
+    # Basic validation
     if not text:
         return JSONResponse(status_code=400, content={"message": "text is required"})
-
+    if not ref_audio_path:
+        return JSONResponse(status_code=400, content={"message": "Must provide ref_audio_path"})
+        
     # Language validation
     if not text_lang:
         return JSONResponse(status_code=400, content={"message": "text_lang is required"})
     elif text_lang not in tts_config.languages:
         return JSONResponse(status_code=400, content={"message": f"text_lang: {text_lang} is not supported in version {tts_config.version}"})
-    if not prompt_lang:
-        return JSONResponse(status_code=400, content={"message": "prompt_lang is required"})
-    elif prompt_lang not in tts_config.languages:
+    if prompt_lang and prompt_lang not in tts_config.languages:
         return JSONResponse(status_code=400, content={"message": f"prompt_lang: {prompt_lang} is not supported in version {tts_config.version}"})
     
     # Media type validation
@@ -295,13 +302,13 @@ async def tts_post_endpoint(
     ref_audio_path: Optional[str] = Form(None),
     aux_ref_audio_files: List[UploadFile] = File(default=[]),
     aux_ref_audio_paths: Optional[List[str]] = Form(None),
-    prompt_lang: str = Form(...),
+    prompt_lang: Optional[str] = Form(None),
     prompt_text: str = Form(""),
     top_k: int = Form(5),
     min_p: float = Form(0.0),
     top_p: float = Form(1.0),
     temperature: float = Form(1.0),
-    text_split_method: str = Form("cut5"),
+    text_split_method: Optional[str] = Form(None),
     batch_size: int = Form(1),
     batch_threshold: float = Form(0.75),
     split_bucket: bool = Form(True),
@@ -314,7 +321,7 @@ async def tts_post_endpoint(
     repetition_penalty: float = Form(1.35)
 ):
     try:
-        # Debug print to see received files
+        # Debug printing
         if ref_audio_file:
             print(f"Received main reference file: {ref_audio_file.filename}")
         if aux_ref_audio_files:
@@ -322,15 +329,7 @@ async def tts_post_endpoint(
             for idx, aux_file in enumerate(aux_ref_audio_files):
                 print(f"Auxiliary file {idx}: {aux_file.filename}")
 
-        # Auto-adjust text_split_method based on language only if not provided
-        if text_split_method is None or text_split_method.strip() == "":
-            if text_lang.lower() == 'en':
-                text_split_method = 'cut6'
-            elif text_lang.lower() in ['ja', 'all_ja']:
-                text_split_method = 'cut7'
-            else:
-                text_split_method = 'cut5'  # Fallback
-
+        # Create request object
         request = TTS_Request(
             text=text,
             text_lang=text_lang,
@@ -356,26 +355,33 @@ async def tts_post_endpoint(
             parallel_infer=parallel_infer,
             repetition_penalty=repetition_penalty
         )
-        
-        # Create initial request dict for validation
-        initial_req = request.dict(exclude={'ref_audio_file', 'aux_ref_audio_files'})
-        initial_req['ref_audio_file'] = ref_audio_file
-        
-        # Validate parameters
-        check_result = check_params(initial_req)
-        if check_result is not None:
-            return check_result
-        
-        # Process audio files
+
+        # Process audio files first
         main_ref_path, aux_paths = await request.process_audio_files()
         
-        # Prepare final request
-        req = request.dict(exclude={'ref_audio_file', 'aux_ref_audio_files'})
-        req['ref_audio_path'] = main_ref_path
-        req['aux_ref_audio_paths'] = aux_paths
-        
-        print(f"Final request configuration: {req}")
-        return await tts_handle(req)
+        # Run ASR if needed
+        await request.process_asr(main_ref_path)
+
+        # Auto-adjust text_split_method if not provided
+        if not request.text_split_method:
+            if text_lang.lower() == 'en':
+                request.text_split_method = 'cut6'
+            elif text_lang.lower() in ['ja', 'all_ja']:
+                request.text_split_method = 'cut7'
+            else:
+                request.text_split_method = 'cut5'
+
+        # Prepare final request dict and validate
+        final_req = request.dict(exclude={'ref_audio_file', 'aux_ref_audio_files'})
+        final_req['ref_audio_path'] = main_ref_path
+        final_req['aux_ref_audio_paths'] = aux_paths
+
+        check_result = check_params(final_req)
+        if check_result is not None:
+            return check_result
+
+        print(f"Final request configuration: {final_req}")
+        return await tts_handle(final_req)
         
     except Exception as e:
         traceback.print_exc()
