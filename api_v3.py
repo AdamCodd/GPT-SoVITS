@@ -70,7 +70,7 @@ class TTS_Request(BaseModel):
     min_p: float = 0.0
     top_p: float = 1.0
     temperature: float = 1.0
-    text_split_method: str = "cut5"
+    text_split_method: Optional[str] = None
     batch_size: int = 1
     batch_threshold: float = 0.75
     split_bucket: bool = True
