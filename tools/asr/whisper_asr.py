@@ -100,9 +100,9 @@ class WhisperPipelineTranscriber:
     def detect_language(
         self,
         audio_input: Union[str, List[str]]
-    ) -> Union[Dict[str, float], List[Dict[str, Dict[str, float]]]]:
+    ) -> Union[str, List[Dict[str, str]]]:
         """
-        Detect the language(s) spoken in the audio file(s)
+        Detect the primary language spoken in the audio file(s).
         """
         try:
             if isinstance(audio_input, list):
@@ -110,13 +110,13 @@ class WhisperPipelineTranscriber:
                 audio_inputs = [self._load_audio(path) for path in audio_input]
                 predictions = self.lang_pipeline(audio_inputs)
                 
+                # Simplify output to only return top language for each file
                 return [
                     {
                         "file": audio_path,
-                        "languages": {
-                            pred["label"]: pred["score"]
-                            for pred in file_pred
-                        }
+                        "languages": max(
+                            file_pred, key=lambda x: x["score"]
+                        )["label"]
                     }
                     for audio_path, file_pred in zip(audio_input, predictions)
                 ]
@@ -125,10 +125,8 @@ class WhisperPipelineTranscriber:
                 audio = self._load_audio(audio_input)
                 predictions = self.lang_pipeline(audio)
                 
-                return {
-                    pred["label"]: pred["score"]
-                    for pred in predictions
-                }
+                # Return the language with the highest score
+                return max(predictions, key=lambda x: x["score"])["label"]
 
         except Exception as e:
             raise Exception(f"Language detection failed: {str(e)}")
@@ -212,13 +210,13 @@ results = transcriber.transcribe(
 ### Language detection
 # Detect language for a single file
 lang_result = transcriber.detect_language("audio.wav")
-# Returns: {"en": 0.98, "fr": 0.01, ...}
+# Returns: "en"
 
 # Detect language for multiple files
 lang_results = transcriber.detect_language(["audio1.wav", "audio2.wav"])
 # Returns: [
-#     {"file": "audio1.wav", "languages": {"en": 0.98, "fr": 0.01, ...}},
-#     {"file": "audio2.wav", "languages": {"es": 0.95, "pt": 0.03, ...}}
+#     {"file": "audio1.wav", "languages": "en"},
+#     {"file": "audio2.wav", "languages": "en"}
 # ]
 
 """
