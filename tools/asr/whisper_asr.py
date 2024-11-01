@@ -14,11 +14,13 @@ from typing import Union, List, Dict, Optional
 import os
 import librosa
 import numpy as np
+from pathlib import Path
+import shutil
 
 class WhisperPipelineTranscriber:
     def __init__(
         self,
-        model_path: str = "openai/whisper-base",
+        model_path: str = "openai/whisper-large-v3",
         language: Optional[str] = None,
         use_fp16: Optional[bool] = None,
         device: Optional[str] = None
@@ -28,10 +30,14 @@ class WhisperPipelineTranscriber:
         self.language = language
         self.sample_rate = 16000
 
+        # Set up local model path
+        self.local_model_dir = Path("GPT-SoVITS/tools/asr/models")
+        self.model_name = model_path.split('/')[-1]
+        self.local_model_path = self.local_model_dir / self.model_name
+
         # Determine attention mechanism based on GPU capabilities
         if self.device == "cuda":
             gpu_name = torch.cuda.get_device_name()
-            # Use flash attention 2 for newer GPUs (Ampere and newer)
             use_flash_attention = any(arch in gpu_name.lower() for arch in ['ampere', 'ada', 'hopper'])
             attn_implementation = "flash_attention_2" if use_flash_attention else "sdpa"
         else:
@@ -46,12 +52,32 @@ class WhisperPipelineTranscriber:
             if self.language:
                 model_kwargs["language"] = self.language
 
+            # Create local model directory if it doesn't exist
+            os.makedirs(self.local_model_dir, exist_ok=True)
+
+            # Determine which model path to use
+            if self.local_model_path.exists():
+                print(f"Loading model from local path: {self.local_model_path}")
+                effective_model_path = str(self.local_model_path)
+            else:
+                print(f"Local model not found at {self.local_model_path}")
+                print(f"Downloading model {model_path} to {self.local_model_path}")
+                effective_model_path = model_path
+
             self.pipeline = pipeline(
                 "automatic-speech-recognition",
-                model=model_path,
+                model=effective_model_path,
                 device=self.device,
-                model_kwargs=model_kwargs
+                model_kwargs=model_kwargs,
+                cache_dir=str(self.local_model_dir)  # Cache downloads in our specified directory
             )
+
+            # If we downloaded the model, ensure it's saved in our local directory
+            if not self.local_model_path.exists():
+                # Save the model to our local directory
+                self.pipeline.save_pretrained(str(self.local_model_path))
+                print(f"Model saved to {self.local_model_path}")
+
         except Exception as e:
             raise Exception(f"Failed to initialize Whisper pipeline: {str(e)}")
 
@@ -170,7 +196,7 @@ Usage Examples:
 
 # Initialize transcriber
 transcriber = WhisperPipelineTranscriber(
-    model_path="openai/whisper-base",
+    model_path="openai/whisper-base", # Optional: Will use the default model 'whisper-v3-large' if not provided
     language="fr"  # Optional: specify source language
 )
 
