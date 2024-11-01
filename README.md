@@ -1,6 +1,12 @@
+## Features
+- ARPAbet support for inference (english only)
+- checkaudio endpoint to assess the audio quality (Duration, RMS level, Signal-to-noise ratio, clipping, spectral flatness)
+- Added improved segmentation methods for EN/JP
+- Added upload audio capabilities for the main reference/auxiliary audio files
+- Added auto-selection for the appropriate segmentation method EN/JP
+- Created Api_v3.py with efficiency improvements, better error handling
+
 <div align="center">
-
-
 <h1>GPT-SoVITS-WebUI</h1>
 A Powerful Few-shot Voice Conversion and Text-to-Speech WebUI.<br><br>
 
