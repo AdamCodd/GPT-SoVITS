@@ -68,9 +68,7 @@ class WhisperPipelineTranscriber:
                 "automatic-speech-recognition",
                 model=effective_model_path,
                 device=self.device,
-                model_kwargs=model_kwargs,
-                cache_dir=str(self.local_model_dir)  # Cache downloads in our specified directory
-            )
+                model_kwargs=model_kwargs)
 
             # If we downloaded the model, ensure it's saved in our local directory
             if not self.local_model_path.exists():
