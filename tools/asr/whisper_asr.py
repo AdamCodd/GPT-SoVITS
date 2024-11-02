@@ -30,20 +30,20 @@ class WhisperPipelineTranscriber:
         self.sample_rate = 16000
 
         # Set up local model paths relative to this file's location
-        current_file_dir = Path(__file__).parent  # gets tools/asr directory
+        current_file_dir = Path(__file__).parent
         self.local_model_dir = current_file_dir / "models"
-        self.model_name = model_path.split('/')[-1]  # Get just 'whisper-large-v3'
+        self.model_name = model_path.split('/')[-1]
         
         # Define possible local paths
         possible_paths = [
-            self.local_model_dir / self.model_name,  # tools/asr/models/whisper-large-v3
-            self.local_model_dir / model_path.replace('/', '-'),  # tools/asr/models/openai-whisper-large-v3
+            self.local_model_dir / self.model_name,
+            self.local_model_dir / model_path.replace('/', '-'),
         ]
 
         # Try to find existing local model
         self.local_model_path = None
         for path in possible_paths:
-            if path.exists() and (path / "config.json").exists():  # Verify it's a valid model directory
+            if path.exists() and (path / "config.json").exists():
                 self.local_model_path = path
                 print(f"Found local model at: {path}")
                 break
@@ -71,24 +71,12 @@ class WhisperPipelineTranscriber:
             # Use local path if found, otherwise use HF model path
             effective_model_path = str(self.local_model_path) if self.local_model_path else model_path
             
-            # Initialize main transcription pipeline
+            # Initialize single pipeline for both transcription and language detection
             self.pipeline = pipeline(
                 "automatic-speech-recognition",
                 model=effective_model_path,
                 device=self.device,
                 model_kwargs=model_kwargs
-            )
-
-            # Initialize language detection pipeline with the same model
-            self.lang_pipeline = pipeline(
-                "automatic-speech-recognition",
-                model=effective_model_path,
-                device=self.device,
-                model_kwargs={
-                    **model_kwargs,
-                    "return_timestamps": False,
-                    "task": "language_detection"
-                }
             )
 
         except Exception as e:
@@ -121,29 +109,31 @@ class WhisperPipelineTranscriber:
             if isinstance(audio_input, list):
                 # Handle multiple files
                 audio_inputs = [self._load_audio(path) for path in audio_input]
-                predictions = self.lang_pipeline(audio_inputs)
+                predictions = self.pipeline(
+                    audio_inputs,
+                    generate_kwargs={"task": "transcribe"},
+                    return_timestamps=False
+                )
                 
-                # Simplify output to only return top language for each file
+                # Process each prediction to detect language
                 return [
                     {
                         "file": audio_path,
-                        "languages": max(
-                            file_pred["language_detection"], 
-                            key=lambda x: x["score"]
-                        )["language"]
+                        "language": pred.get("language", "en")  # Default to English if not detected
                     }
-                    for audio_path, file_pred in zip(audio_input, predictions)
+                    for audio_path, pred in zip(audio_input, predictions)
                 ]
             else:
                 # Handle single file
                 audio = self._load_audio(audio_input)
-                prediction = self.lang_pipeline(audio)
+                prediction = self.pipeline(
+                    audio,
+                    generate_kwargs={"task": "transcribe"},
+                    return_timestamps=False
+                )
                 
-                # Return the language with the highest score
-                return max(
-                    prediction["language_detection"],
-                    key=lambda x: x["score"]
-                )["language"]
+                # Return detected language
+                return prediction.get("language", "en")  # Default to English if not detected
 
         except Exception as e:
             raise Exception(f"Language detection failed: {str(e)}")
@@ -197,8 +187,6 @@ class WhisperPipelineTranscriber:
     def cleanup(self):
         if hasattr(self, 'pipeline'):
             del self.pipeline
-        if hasattr(self, 'lang_pipeline'):
-            del self.lang_pipeline
         if self.device == "cuda":
             torch.cuda.empty_cache()
 
