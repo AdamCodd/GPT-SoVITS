@@ -65,8 +65,8 @@ class TTS_Request(BaseModel):
     ref_audio_path: Optional[str] = None
     aux_ref_audio_files: Optional[List[UploadFile]] = []
     aux_ref_audio_paths: Optional[List[str]] = []
-    prompt_lang: str = None
-    prompt_text: str = ""
+    prompt_lang: Optional[str] = ""
+    prompt_text: Optional[str] = ""
     top_k: int = 5
     min_p: float = 0.0
     top_p: float = 1.0
@@ -303,8 +303,8 @@ async def tts_post_endpoint(
     ref_audio_path: Optional[str] = Form(None),
     aux_ref_audio_files: List[UploadFile] = File(default=[]),
     aux_ref_audio_paths: Optional[List[str]] = Form(None),
-    prompt_lang: Optional[str] = Form(None),
-    prompt_text: str = Form(""),
+    prompt_lang: Optional[str] = Form(""),
+    prompt_text: Optional[str] = Form(""),
     top_k: int = Form(5),
     min_p: float = Form(0.0),
     top_p: float = Form(1.0),
