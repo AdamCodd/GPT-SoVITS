@@ -71,11 +71,24 @@ class WhisperPipelineTranscriber:
             # Use local path if found, otherwise use HF model path
             effective_model_path = str(self.local_model_path) if self.local_model_path else model_path
             
+            # Initialize main transcription pipeline
             self.pipeline = pipeline(
                 "automatic-speech-recognition",
                 model=effective_model_path,
                 device=self.device,
                 model_kwargs=model_kwargs
+            )
+
+            # Initialize language detection pipeline with the same model
+            self.lang_pipeline = pipeline(
+                "automatic-speech-recognition",
+                model=effective_model_path,
+                device=self.device,
+                model_kwargs={
+                    **model_kwargs,
+                    "return_timestamps": False,
+                    "task": "language_detection"
+                }
             )
 
         except Exception as e:
@@ -115,18 +128,22 @@ class WhisperPipelineTranscriber:
                     {
                         "file": audio_path,
                         "languages": max(
-                            file_pred, key=lambda x: x["score"]
-                        )["label"]
+                            file_pred["language_detection"], 
+                            key=lambda x: x["score"]
+                        )["language"]
                     }
                     for audio_path, file_pred in zip(audio_input, predictions)
                 ]
             else:
                 # Handle single file
                 audio = self._load_audio(audio_input)
-                predictions = self.lang_pipeline(audio)
+                prediction = self.lang_pipeline(audio)
                 
                 # Return the language with the highest score
-                return max(predictions, key=lambda x: x["score"])["label"]
+                return max(
+                    prediction["language_detection"],
+                    key=lambda x: x["score"]
+                )["language"]
 
         except Exception as e:
             raise Exception(f"Language detection failed: {str(e)}")
@@ -180,6 +197,8 @@ class WhisperPipelineTranscriber:
     def cleanup(self):
         if hasattr(self, 'pipeline'):
             del self.pipeline
+        if hasattr(self, 'lang_pipeline'):
+            del self.lang_pipeline
         if self.device == "cuda":
             torch.cuda.empty_cache()
 
