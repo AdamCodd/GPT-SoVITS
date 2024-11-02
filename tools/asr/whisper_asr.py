@@ -15,7 +15,6 @@ import os
 import librosa
 import numpy as np
 from pathlib import Path
-import shutil
 
 class WhisperPipelineTranscriber:
     def __init__(
@@ -30,10 +29,27 @@ class WhisperPipelineTranscriber:
         self.language = language
         self.sample_rate = 16000
 
-        # Set up local model path
-        self.local_model_dir = Path("GPT-SoVITS/tools/asr/models")
-        self.model_name = model_path.split('/')[-1]
-        self.local_model_path = self.local_model_dir / self.model_name
+        # Set up local model paths relative to this file's location
+        current_file_dir = Path(__file__).parent  # gets tools/asr directory
+        self.local_model_dir = current_file_dir / "models"
+        self.model_name = model_path.split('/')[-1]  # Get just 'whisper-large-v3'
+        
+        # Define possible local paths
+        possible_paths = [
+            self.local_model_dir / self.model_name,  # tools/asr/models/whisper-large-v3
+            self.local_model_dir / model_path.replace('/', '-'),  # tools/asr/models/openai-whisper-large-v3
+        ]
+
+        # Try to find existing local model
+        self.local_model_path = None
+        for path in possible_paths:
+            if path.exists() and (path / "config.json").exists():  # Verify it's a valid model directory
+                self.local_model_path = path
+                print(f"Found local model at: {path}")
+                break
+
+        if not self.local_model_path:
+            print(f"Local model not found, will download from Hugging Face: {model_path}")
 
         # Determine attention mechanism based on GPU capabilities
         if self.device == "cuda":
@@ -52,29 +68,15 @@ class WhisperPipelineTranscriber:
             if self.language:
                 model_kwargs["language"] = self.language
 
-            # Create local model directory if it doesn't exist
-            os.makedirs(self.local_model_dir, exist_ok=True)
-
-            # Determine which model path to use
-            if self.local_model_path.exists():
-                print(f"Loading model from local path: {self.local_model_path}")
-                effective_model_path = str(self.local_model_path)
-            else:
-                print(f"Local model not found at {self.local_model_path}")
-                print(f"Downloading model {model_path} to {self.local_model_path}")
-                effective_model_path = model_path
-
+            # Use local path if found, otherwise use HF model path
+            effective_model_path = str(self.local_model_path) if self.local_model_path else model_path
+            
             self.pipeline = pipeline(
                 "automatic-speech-recognition",
                 model=effective_model_path,
                 device=self.device,
-                model_kwargs=model_kwargs)
-
-            # If we downloaded the model, ensure it's saved in our local directory
-            if not self.local_model_path.exists():
-                # Save the model to our local directory
-                self.pipeline.save_pretrained(str(self.local_model_path))
-                print(f"Model saved to {self.local_model_path}")
+                model_kwargs=model_kwargs
+            )
 
         except Exception as e:
             raise Exception(f"Failed to initialize Whisper pipeline: {str(e)}")
